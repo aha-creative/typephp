@@ -59,7 +59,7 @@ describe('DNF & Complex Intersections ((A&B)|null, Shapes, and Generics)', funct
             ];
 
             expect(fn () => $service->processShapeWithIntersection($badData))
-                ->toThrow(TypeError::class, "['collection'] must be of type ArrayAccess")
+                ->toThrow(TypeError::class, "['collection'] must be of type (Countable & ArrayAccess)")
             ;
         });
 

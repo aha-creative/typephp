@@ -246,7 +246,7 @@ describe('Intersections in Callables (Countable & ArrayAccess)', function () {
         $onlyCountable = new CountableOnly();
 
         expect(fn () => testIntersectionCallableParam($cb, $onlyCountable))
-            ->toThrow(TypeError::class, 'must be of type ArrayAccess')
+            ->toThrow(TypeError::class, 'must be of type (Countable & ArrayAccess)')
         ;
     });
 });
@@ -302,7 +302,6 @@ describe('Static Closures (static-closure)', function () {
 
         $nonStaticClosure = fn (int $id): string => "bound_{$id}";
         expect(fn () => testStaticClosureParam($nonStaticClosure))
-            ->toThrow(TypeError::class, 'must be a static Closure')
-        ;
+            ->toThrow(TypeError::class, 'must be a static Closure');
     });
 });
