@@ -13,6 +13,22 @@ use TypePHP\Internal\Docblock\DocblockExtractor;
  */
 final class ContractVisitor extends NodeVisitorAbstract
 {
+    private const ASSIGN_OP_MAP = [
+        Node\Expr\AssignOp\Plus::class => Node\Expr\BinaryOp\Plus::class,
+        Node\Expr\AssignOp\Minus::class => Node\Expr\BinaryOp\Minus::class,
+        Node\Expr\AssignOp\Mul::class => Node\Expr\BinaryOp\Mul::class,
+        Node\Expr\AssignOp\Div::class => Node\Expr\BinaryOp\Div::class,
+        Node\Expr\AssignOp\Mod::class => Node\Expr\BinaryOp\Mod::class,
+        Node\Expr\AssignOp\Concat::class => Node\Expr\BinaryOp\Concat::class,
+        Node\Expr\AssignOp\Pow::class => Node\Expr\BinaryOp\Pow::class,
+        Node\Expr\AssignOp\BitwiseAnd::class => Node\Expr\BinaryOp\BitwiseAnd::class,
+        Node\Expr\AssignOp\BitwiseOr::class => Node\Expr\BinaryOp\BitwiseOr::class,
+        Node\Expr\AssignOp\BitwiseXor::class => Node\Expr\BinaryOp\BitwiseXor::class,
+        Node\Expr\AssignOp\ShiftLeft::class => Node\Expr\BinaryOp\ShiftLeft::class,
+        Node\Expr\AssignOp\ShiftRight::class => Node\Expr\BinaryOp\ShiftRight::class,
+        Node\Expr\AssignOp\Coalesce::class => Node\Expr\BinaryOp\Coalesce::class,
+    ];
+
     private ScopeManager $scopeManager;
 
     private string $currentNamespace = '';
@@ -103,6 +119,20 @@ final class ContractVisitor extends NodeVisitorAbstract
 
         if ($node instanceof Node\Expr\Clone_) {
             return $this->wrapClone($node);
+        }
+
+        if ($node instanceof Node\Expr\AssignOp) {
+            $replacement = $this->handleAssignOp($node);
+            if ($replacement !== null) {
+                return $replacement;
+            }
+        }
+
+        if ($node instanceof Node\Expr\PreInc || $node instanceof Node\Expr\PostInc || $node instanceof Node\Expr\PreDec || $node instanceof Node\Expr\PostDec) {
+            $replacement = $this->handleIncDec($node);
+            if ($replacement !== null) {
+                return $replacement;
+            }
         }
 
         if ($this->isScopeBoundary($node)) {
@@ -282,6 +312,79 @@ final class ContractVisitor extends NodeVisitorAbstract
 
             $node->expr = $this->wrapPropertyCheck($node->expr, $classArg, $node->var->name->toString(), $node->var->getStartLine());
         }
+    }
+
+    private function handleAssignOp(Node\Expr\AssignOp $node): ?Node\Expr\Assign
+    {
+        $binaryOpClass = self::ASSIGN_OP_MAP[$node::class] ?? null;
+        if ($binaryOpClass === null) {
+            return null;
+        }
+
+        $binaryExpr = new $binaryOpClass($node->var, $node->expr);
+
+        if ($node->var instanceof Node\Expr\Variable && \is_string($node->var->name)) {
+            $varName = $node->var->name;
+            $typeString = $this->scopeManager->getVarTypeFromScope($varName);
+
+            if ($typeString !== null) {
+                return new Node\Expr\Assign(
+                    $node->var,
+                    $this->wrapVariableCheck($binaryExpr, $typeString, $varName, $node->var->getStartLine())
+                );
+            }
+        } elseif ($node->var instanceof Node\Expr\PropertyFetch && $node->var->name instanceof Node\Identifier) {
+            return new Node\Expr\Assign(
+                $node->var,
+                $this->wrapPropertyCheck($binaryExpr, $node->var->var, $node->var->name->toString(), $node->var->getStartLine())
+            );
+        } elseif ($node->var instanceof Node\Expr\StaticPropertyFetch && $node->var->name instanceof Node\VarLikeIdentifier) {
+            $classArg = $node->var->class instanceof Node\Name
+                ? new Node\Expr\ClassConstFetch($node->var->class, 'class')
+                : $node->var->class;
+
+            return new Node\Expr\Assign(
+                $node->var,
+                $this->wrapPropertyCheck($binaryExpr, $classArg, $node->var->name->toString(), $node->var->getStartLine())
+            );
+        }
+
+        return null;
+    }
+
+    private function handleIncDec(Node\Expr\PreInc|Node\Expr\PostInc|Node\Expr\PreDec|Node\Expr\PostDec $node): ?Node\Expr\Assign
+    {
+        $isInc = $node instanceof Node\Expr\PreInc || $node instanceof Node\Expr\PostInc;
+        $binaryClass = $isInc ? Node\Expr\BinaryOp\Plus::class : Node\Expr\BinaryOp\Minus::class;
+        $binaryExpr = new $binaryClass($node->var, new Node\Scalar\LNumber(1));
+
+        if ($node->var instanceof Node\Expr\Variable && \is_string($node->var->name)) {
+            $varName = $node->var->name;
+            $typeString = $this->scopeManager->getVarTypeFromScope($varName);
+
+            if ($typeString !== null) {
+                return new Node\Expr\Assign(
+                    $node->var,
+                    $this->wrapVariableCheck($binaryExpr, $typeString, $varName, $node->var->getStartLine())
+                );
+            }
+        } elseif ($node->var instanceof Node\Expr\PropertyFetch && $node->var->name instanceof Node\Identifier) {
+            return new Node\Expr\Assign(
+                $node->var,
+                $this->wrapPropertyCheck($binaryExpr, $node->var->var, $node->var->name->toString(), $node->var->getStartLine())
+            );
+        } elseif ($node->var instanceof Node\Expr\StaticPropertyFetch && $node->var->name instanceof Node\VarLikeIdentifier) {
+            $classArg = $node->var->class instanceof Node\Name
+                ? new Node\Expr\ClassConstFetch($node->var->class, 'class')
+                : $node->var->class;
+
+            return new Node\Expr\Assign(
+                $node->var,
+                $this->wrapPropertyCheck($binaryExpr, $classArg, $node->var->name->toString(), $node->var->getStartLine())
+            );
+        }
+
+        return null;
     }
 
     private function wrapVariableCheck(Node\Expr $expr, string $typeString, string $varName, int $line): Node\Expr\Ternary
