@@ -78,6 +78,63 @@ describe('DocblockNormalizer', function () {
         });
     });
 
+    describe('Variadic Tuple and Spread Syntax Normalization', function () {
+        test('normalizes trailing ...Type[] spread syntax to ...<Type>', function () {
+            $doc = '/** @param array{string, int, ...float[]} $tuple */';
+            $expected = '/** @param array{string, int, ...<float>} $tuple */';
+
+            expect(DocblockNormalizer::normalize($doc))->toBe($expected);
+        });
+
+        test('normalizes trailing ...list<Type> spread syntax to ...<Type>', function () {
+            $doc = '/** @param array{string, ...list<positive-int>} $data */';
+            $expected = '/** @param array{string, ...<positive-int>} $data */';
+
+            expect(DocblockNormalizer::normalize($doc))->toBe($expected);
+        });
+
+        test('normalizes trailing ...array<Type> spread syntax to ...<Type>', function () {
+            $doc = '/** @param array{id: int, ...array<string>} $payload */';
+            $expected = '/** @param array{id: int, ...<string>} $payload */';
+
+            expect(DocblockNormalizer::normalize($doc))->toBe($expected);
+        });
+
+        test('preserves already-compliant ...<Type> and ...<Key, Value> syntax', function () {
+            $doc1 = '/** @param array{string, int, ...<float>} $tuple */';
+            expect(DocblockNormalizer::normalize($doc1))->toBe($doc1);
+
+            $doc2 = '/** @param array{id: int, ...<string, string>} $options */';
+            expect(DocblockNormalizer::normalize($doc2))->toBe($doc2);
+
+            $doc3 = '/** @param array{string, int, ...} $bareTuple */';
+            expect(DocblockNormalizer::normalize($doc3))->toBe($doc3);
+        });
+    });
+
+    describe('Nested Braces in Custom Class Shapes', function () {
+        test('normalizes custom class shape containing nested array shape', function () {
+            $doc = '/** @param stdClass{id: int, config: array{debug: bool}} $data */';
+            $expected = '/** @param (stdClass&object{id: int, config: array{debug: bool}}) $data */';
+
+            expect(DocblockNormalizer::normalize($doc))->toBe($expected);
+        });
+
+        test('normalizes custom class shape containing multi-level nested array shapes', function () {
+            $doc = '/** @param stdClass{id: int, a: array{b: array{c: string}}} $data */';
+            $expected = '/** @param (stdClass&object{id: int, a: array{b: array{c: string}}}) $data */';
+
+            expect(DocblockNormalizer::normalize($doc))->toBe($expected);
+        });
+
+        test('normalizes nested custom class shapes within custom class shapes', function () {
+            $doc = '/** @param stdClass{id: int, author: User{name: string}} $data */';
+            $expected = '/** @param (stdClass&object{id: int, author: (User&object{name: string})}) $data */';
+
+            expect(DocblockNormalizer::normalize($doc))->toBe($expected);
+        });
+    });
+
     describe('Custom Class Shapes to Intersection Shapes', function () {
         test('converts stdClass shapes into intersection shapes', function () {
             $doc = '/** @param stdClass{id: int, name: string} $data */';

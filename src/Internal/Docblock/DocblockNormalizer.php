@@ -7,6 +7,7 @@ namespace TypePHP\Internal\Docblock;
 /**
  * Normalizes PHPDoc comment strings before AST parsing.
  * Converts class-specific shapes like stdClass{id: int} into intersection shapes (stdClass & object{id: int}).
+ * Normalizes variadic tuple spread syntax (...Type[] and ...list<Type>) into PHPStan-compliant ...<Type> syntax.
  *
  * @internal
  */
@@ -45,19 +46,34 @@ final class DocblockNormalizer
             $doc = preg_replace('/(\\\\?[a-zA-Z_\x80-\xff][\\\\a-zA-Z0-9_\x80-\xff]*::[a-zA-Z_\x80-\xff][a-zA-Z0-9_\x80-\xff]*)\s*(\??:)/', '"$1"$2', $doc) ?? $doc;
         }
 
+        if (str_contains($doc, '...')) {
+            $doc = preg_replace('/(\.\.\.\s*)([a-zA-Z0-9_\x80-\xff\\\\]+)\[\]/', '$1<$2>', $doc) ?? $doc;
+            $doc = preg_replace('/(\.\.\.\s*)(?:list|array)<([^>]+)>/', '$1<$2>', $doc) ?? $doc;
+        }
+
         if (! str_contains($doc, '{')) {
             return $doc;
         }
 
+        return self::normalizeShapes($doc);
+    }
+
+    /**
+     * Normalizes custom class shapes supporting arbitrary nested balanced braces via PCRE recursion.
+     */
+    private static function normalizeShapes(string $doc): string
+    {
+        $pattern = '/(\\\\?[a-zA-Z_\x80-\xff][\\\\a-zA-Z0-9_\x80-\xff]*)\s*\{((?:[^{}]+|\{(?2)\})*)\}/s';
+
         return preg_replace_callback(
-            '/(\\\\?[a-zA-Z_\x80-\xff][\\\\a-zA-Z0-9_\x80-\xff]*)\s*\{([^}]+)\}/s',
+            $pattern,
             function (array $matches): string {
                 $className = $matches[1];
-                $shapeBody = $matches[2];
+                $shapeBody = self::normalizeShapes($matches[2]);
 
                 $lower = strtolower(ltrim($className, '\\'));
                 if (\in_array($lower, self::BUILTIN_SHAPE_KEYWORDS, strict: true)) {
-                    return $matches[0];
+                    return $className . '{' . $shapeBody . '}';
                 }
 
                 return '(' . $className . '&object{' . $shapeBody . '})';

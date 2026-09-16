@@ -26,6 +26,11 @@ final class ArrayShapeValidator implements TypeValidatorInterface
 
         /** @var ArrayShapeNode $shapeNode */
         $shapeNode = $node;
+
+        if ($shapeNode->kind === ArrayShapeNode::KIND_LIST && \count($value) > 0 && ! array_is_list($value)) {
+            return ErrorFactory::createError($context . ' must be a list, ' . TypeFormatter::formatGivenValue($value) . ' given');
+        }
+
         $knownKeys = [];
         $nextAutoIndex = 0;
         $matchedKeysCount = 0;
