@@ -6,8 +6,6 @@ namespace TypePHP\Internal\Util;
 
 use TypePHP\Internal\Io\CacheManager;
 
-use function substr;
-
 require_once __DIR__ . '/../Io/CacheManager.php';
 
 /**
