@@ -32,7 +32,7 @@ use TypePHP\Internal\Util\StubManager;
 use TypePHP\Internal\Validator\TypeValidatorRegistry;
 
 /**
- * @internal Main orchestrator parsing and caching PHPDoc contracts (@param, @return, @template, @phpstan-type, @var, stubs).
+ * @internal Main orchestrator parsing and caching PHPDoc contracts (@param, @param-out, @return, @template, @phpstan-type, @var, stubs).
  */
 final class DocblockParser
 {
@@ -41,11 +41,13 @@ final class DocblockParser
      *
      * @var array<string, array{
      *     types: array<string, TypeNode>,
+     *     paramOuts: array<string, TypeNode>,
      *     templates: array<string, TemplateTagValueNode>,
      *     classTemplates: array<string, TemplateTagValueNode>,
      *     return: ?TypeNode,
      *     aliases: array<string, TypeNode>,
      *     hasParamContract: bool,
+     *     hasParamOutContract: bool,
      *     hasReturnContract: bool,
      *     paramsUseGenerics: bool,
      *     returnUsesGenerics: bool,
@@ -328,11 +330,13 @@ final class DocblockParser
      *
      * @return array{
      *     types: array<string, TypeNode>,
+     *     paramOuts: array<string, TypeNode>,
      *     templates: array<string, TemplateTagValueNode>,
      *     classTemplates: array<string, TemplateTagValueNode>,
      *     return: ?TypeNode,
      *     aliases: array<string, TypeNode>,
      *     hasParamContract: bool,
+     *     hasParamOutContract: bool,
      *     hasReturnContract: bool,
      *     paramsUseGenerics: bool,
      *     returnUsesGenerics: bool,
@@ -366,11 +370,13 @@ final class DocblockParser
                         self::parseClassLevelDocs($refClass, $classTemplates, $aliases);
                         $contract = [
                             'types' => [],
+                            'paramOuts' => [],
                             'templates' => [],
                             'classTemplates' => $classTemplates,
                             'return' => null,
                             'aliases' => $aliases,
                             'hasParamContract' => false,
+                            'hasParamOutContract' => false,
                             'hasReturnContract' => false,
                             'paramsUseGenerics' => false,
                             'returnUsesGenerics' => false,
@@ -385,11 +391,13 @@ final class DocblockParser
                 } else {
                     $contract = [
                         'types' => [],
+                        'paramOuts' => [],
                         'templates' => [],
                         'classTemplates' => [],
                         'return' => null,
                         'aliases' => [],
                         'hasParamContract' => false,
+                        'hasParamOutContract' => false,
                         'hasReturnContract' => false,
                         'paramsUseGenerics' => false,
                         'returnUsesGenerics' => false,
@@ -408,11 +416,13 @@ final class DocblockParser
         } catch (\ReflectionException $e) {
             $contract = [
                 'types' => [],
+                'paramOuts' => [],
                 'templates' => [],
                 'classTemplates' => [],
                 'return' => null,
                 'aliases' => [],
                 'hasParamContract' => false,
+                'hasParamOutContract' => false,
                 'hasReturnContract' => false,
                 'paramsUseGenerics' => false,
                 'returnUsesGenerics' => false,
@@ -768,11 +778,13 @@ final class DocblockParser
      *
      * @return array{
      *     types: array<string, TypeNode>,
+     *     paramOuts: array<string, TypeNode>,
      *     templates: array<string, TemplateTagValueNode>,
      *     classTemplates: array<string, TemplateTagValueNode>,
      *     return: ?TypeNode,
      *     aliases: array<string, TypeNode>,
      *     hasParamContract: bool,
+     *     hasParamOutContract: bool,
      *     hasReturnContract: bool,
      *     paramsUseGenerics: bool,
      *     returnUsesGenerics: bool,
@@ -787,13 +799,14 @@ final class DocblockParser
     private static function parseMethod(\ReflectionMethod $ref): array
     {
         $types = [];
+        $paramOuts = [];
         $methodTemplates = [];
         $classTemplates = [];
         $returnType = null;
         $aliases = [];
 
         self::parseClassLevelDocs($ref->getDeclaringClass(), $classTemplates, $aliases);
-        self::parseMethodHierarchyDocs($ref, $types, $methodTemplates, $returnType, $aliases);
+        self::parseMethodHierarchyDocs($ref, $types, $methodTemplates, $returnType, $aliases, $paramOuts);
 
         if ($ref->getName() === '__construct') {
             self::applyConstructorPromotionFallback($ref, $types, $classTemplates, $aliases);
@@ -807,6 +820,15 @@ final class DocblockParser
                     $paramsUseGenerics = true;
 
                     break;
+                }
+            }
+            if (! $paramsUseGenerics) {
+                foreach ($paramOuts as $tNode) {
+                    if (self::typeReferencesTemplate($tNode, $allTemplates)) {
+                        $paramsUseGenerics = true;
+
+                        break;
+                    }
                 }
             }
         }
@@ -842,11 +864,13 @@ final class DocblockParser
 
         return [
             'types' => $types,
+            'paramOuts' => $paramOuts,
             'templates' => $methodTemplates,
             'classTemplates' => $classTemplates,
             'return' => $returnType,
             'aliases' => $aliases,
             'hasParamContract' => \count($types) > 0,
+            'hasParamOutContract' => \count($paramOuts) > 0,
             'hasReturnContract' => $returnType !== null,
             'paramsUseGenerics' => $paramsUseGenerics,
             'returnUsesGenerics' => $returnUsesGenerics,
@@ -864,11 +888,13 @@ final class DocblockParser
      *
      * @return array{
      *     types: array<string, TypeNode>,
+     *     paramOuts: array<string, TypeNode>,
      *     templates: array<string, TemplateTagValueNode>,
      *     classTemplates: array<string, TemplateTagValueNode>,
      *     return: ?TypeNode,
      *     aliases: array<string, TypeNode>,
      *     hasParamContract: bool,
+     *     hasParamOutContract: bool,
      *     hasReturnContract: bool,
      *     paramsUseGenerics: bool,
      *     returnUsesGenerics: bool,
@@ -883,6 +909,7 @@ final class DocblockParser
     private static function parseFunction(\ReflectionFunction $ref): array
     {
         $types = [];
+        $paramOuts = [];
         $templates = [];
         $returnType = null;
         $aliases = [];
@@ -894,11 +921,13 @@ final class DocblockParser
         if ($doc === false || $doc === null || self::shouldIgnoreDoc($doc)) {
             return [
                 'types' => [],
+                'paramOuts' => [],
                 'templates' => [],
                 'classTemplates' => [],
                 'return' => null,
                 'aliases' => [],
                 'hasParamContract' => false,
+                'hasParamOutContract' => false,
                 'hasReturnContract' => false,
                 'paramsUseGenerics' => false,
                 'returnUsesGenerics' => false,
@@ -951,6 +980,13 @@ final class DocblockParser
             $types[$paramName] = $resolvedType;
         }
 
+        foreach (DocblockExtractor::getParamOutTags($phpDocNode) as $paramName => $paramOutTag) {
+            $type = $paramOutTag->type;
+            $substitutedType = self::substituteAliases($type, $aliases);
+            $resolvedType = SpecialTypeResolver::resolve($substitutedType, $ref);
+            $paramOuts[$paramName] = $resolvedType;
+        }
+
         $returnTag = DocblockExtractor::getReturnTag($phpDocNode);
         if ($returnTag !== null) {
             $substitutedReturn = self::substituteAliases($returnTag->type, $aliases);
@@ -972,6 +1008,15 @@ final class DocblockParser
                     $paramsUseGenerics = true;
 
                     break;
+                }
+            }
+            if (! $paramsUseGenerics) {
+                foreach ($paramOuts as $tNode) {
+                    if (self::typeReferencesTemplate($tNode, $templates)) {
+                        $paramsUseGenerics = true;
+
+                        break;
+                    }
                 }
             }
         }
@@ -1002,11 +1047,13 @@ final class DocblockParser
 
         return [
             'types' => $types,
+            'paramOuts' => $paramOuts,
             'templates' => $templates,
             'classTemplates' => [],
             'return' => $returnType,
             'aliases' => $aliases,
             'hasParamContract' => \count($types) > 0,
+            'hasParamOutContract' => \count($paramOuts) > 0,
             'hasReturnContract' => $returnType !== null,
             'paramsUseGenerics' => $paramsUseGenerics,
             'returnUsesGenerics' => $returnUsesMethodTemplates,
@@ -1068,20 +1115,22 @@ final class DocblockParser
     }
 
     /**
-     * Resolves method-level docblocks (@param, @return, @template, aliases) up the method hierarchy.
+     * Resolves method-level docblocks (@param, @param-out, @return, @template, aliases) up the method hierarchy.
      *
      * @param \ReflectionMethod $ref
      * @param array<string, TypeNode> $types
      * @param array<string, TemplateTagValueNode> $templates
      * @param TypeNode|null $returnType
      * @param array<string, TypeNode> $aliases
+     * @param array<string, TypeNode> $paramOuts
      */
     private static function parseMethodHierarchyDocs(
         \ReflectionMethod $ref,
         array &$types,
         array &$templates,
         ?TypeNode &$returnType,
-        array &$aliases
+        array &$aliases,
+        array &$paramOuts = []
     ): void {
         $hierarchy = HierarchyResolver::getMethodHierarchy($ref);
         $baseParams = $ref->getParameters();
@@ -1163,6 +1212,24 @@ final class DocblockParser
                     }
 
                     $types[$targetParamName] = $resolvedType;
+                }
+            }
+
+            $paramOutTags = DocblockExtractor::getParamOutTags($phpDocNode);
+            foreach ($paramOutTags as $paramName => $paramOutTag) {
+                $targetParamName = self::resolveTargetParamName(
+                    $paramName,
+                    $baseParamSet,
+                    $baseParamNames,
+                    $hierNameToIndex,
+                    $isConstructor
+                );
+
+                if ($targetParamName !== null && ! isset($paramOuts[$targetParamName])) {
+                    $type = $paramOutTag->type;
+                    $substitutedType = self::substituteAliases($type, $aliases);
+                    $resolvedType = SpecialTypeResolver::resolve($substitutedType, $hierRef);
+                    $paramOuts[$targetParamName] = $resolvedType;
                 }
             }
 

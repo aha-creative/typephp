@@ -10,6 +10,7 @@ use TypePHP\Internal\Ast\ScopeCleaner;
 use TypePHP\Internal\Checker\GeneratorChecker;
 use TypePHP\Internal\Checker\InlineChecker;
 use TypePHP\Internal\Checker\ParamChecker;
+use TypePHP\Internal\Checker\ParamOutChecker;
 use TypePHP\Internal\Checker\ReturnChecker;
 use TypePHP\Internal\Diagnostic\ErrorMessage;
 use TypePHP\Internal\Docblock\DocblockParser;
@@ -44,6 +45,7 @@ final class RuntimeTypeChecker
         self::$hasMethodTemplatesCache = [];
         IgnoreManager::reset();
         CallerBoundaryResolver::reset();
+        ParamOutChecker::reset();
     }
 
     /**
@@ -145,8 +147,10 @@ final class RuntimeTypeChecker
             return null;
         }
 
-        if (isset(ParamChecker::$noParamContractCache[$function])
-            && ! (self::$hasMethodTemplatesCache[$function] ?? false)) {
+        if (
+            isset(ParamChecker::$noParamContractCache[$function])
+            && ! (self::$hasMethodTemplatesCache[$function] ?? false)
+        ) {
             return null;
         }
 
@@ -212,6 +216,31 @@ final class RuntimeTypeChecker
         }
 
         return $err;
+    }
+
+    /**
+     * Validates a by-reference parameter's post-condition (@param-out) upon exit.
+     */
+    public static function checkParamOut(string $function, string $paramName, mixed $value, object|string|null $thisOrClass = null): ?ErrorMessage
+    {
+        if (! Config::isEnabled() || ! Config::isParamsEnabled()) {
+            return null;
+        }
+
+        $thisObj = \is_object($thisOrClass) ? $thisOrClass : null;
+        $effectiveFunction = ParamChecker::resolveEffectiveFunction($function, $thisOrClass, $thisObj);
+
+        if (CallerBoundaryResolver::shouldBypass($effectiveFunction)) {
+            return null;
+        }
+
+        $res = ParamOutChecker::checkParamOut($function, $paramName, $value, $thisOrClass, self::getRegistry(), $effectiveFunction);
+
+        if ($res instanceof ErrorMessage && IgnoreManager::isCallerIgnored()) {
+            return null;
+        }
+
+        return $res;
     }
 
     /**

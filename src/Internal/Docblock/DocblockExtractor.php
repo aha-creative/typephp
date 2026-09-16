@@ -9,6 +9,7 @@ use PHPStan\PhpDocParser\Ast\PhpDoc\ParamTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\ReturnTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\TemplateTagValueNode;
+use PHPStan\PhpDocParser\Ast\PhpDoc\ParamOutTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\VarTagValueNode;
 use PHPStan\PhpDocParser\Ast\Type\TypeNode;
 use PHPStan\PhpDocParser\Lexer\Lexer;
@@ -136,6 +137,39 @@ final class DocblockExtractor
     }
 
     /**
+     * Extracts parameter-out tags with priority: @phpstan-param-out > @psalm-param-out > @param-out.
+     *
+     * @return array<string, ParamOutTagValueNode>
+     */
+    public static function getParamOutTags(PhpDocNode $node): array
+    {
+        $tags = [];
+
+        foreach ($node->getTagsByName('@param-out') as $tag) {
+            if ($tag->value instanceof ParamOutTagValueNode) {
+                $pName = ltrim($tag->value->parameterName, '$');
+                $tags[$pName] = $tag->value;
+            }
+        }
+
+        foreach ($node->getTagsByName('@psalm-param-out') as $tag) {
+            if ($tag->value instanceof ParamOutTagValueNode) {
+                $pName = ltrim($tag->value->parameterName, '$');
+                $tags[$pName] = $tag->value;
+            }
+        }
+
+        foreach ($node->getTagsByName('@phpstan-param-out') as $tag) {
+            if ($tag->value instanceof ParamOutTagValueNode) {
+                $pName = ltrim($tag->value->parameterName, '$');
+                $tags[$pName] = $tag->value;
+            }
+        }
+
+        return $tags;
+    }
+
+    /**
      * Extracts return tag with priority: @phpstan-return > @psalm-return > @return.
      */
     public static function getReturnTag(PhpDocNode $node): ?ReturnTagValueNode
@@ -189,9 +223,9 @@ final class DocblockExtractor
         }
 
         $unnamed = [];
-        $unnamedPhpstan = array_values(array_filter($node->getVarTagValues('@phpstan-var'), fn ($t) => $t->variableName === ''));
-        $unnamedPsalm = array_values(array_filter($node->getVarTagValues('@psalm-var'), fn ($t) => $t->variableName === ''));
-        $unnamedStandard = array_values(array_filter($node->getVarTagValues('@var'), fn ($t) => $t->variableName === ''));
+        $unnamedPhpstan = array_values(array_filter($node->getVarTagValues('@phpstan-var'), fn($t) => $t->variableName === ''));
+        $unnamedPsalm = array_values(array_filter($node->getVarTagValues('@psalm-var'), fn($t) => $t->variableName === ''));
+        $unnamedStandard = array_values(array_filter($node->getVarTagValues('@var'), fn($t) => $t->variableName === ''));
 
         if (\count($unnamedPhpstan) > 0) {
             $unnamed = $unnamedPhpstan;
