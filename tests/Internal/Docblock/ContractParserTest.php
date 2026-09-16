@@ -32,9 +32,12 @@ use TypePHP\Tests\Fixtures\Types\NonCpmStrings;
 
 /**
  * @param mixed &$id
+ *
  * @param-out positive-int $id
  */
-function sampleParamOutDocblockFunction(mixed &$id): void {}
+function sampleParamOutDocblockFunction(mixed &$id): void
+{
+}
 
 describe('DocblockParser Unit Tests', function () {
     beforeEach(function () {

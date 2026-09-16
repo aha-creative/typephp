@@ -17,6 +17,7 @@ use TypePHP\Tests\Fixtures\Domain\Dog;
  * Fixture: Scalar @param-out
  *
  * @param mixed &$id
+ *
  * @param-out positive-int $id
  */
 function internalParamOutScalarFixture(mixed &$id): void
@@ -30,6 +31,7 @@ function internalParamOutScalarFixture(mixed &$id): void
  *
  * @param T $pet
  * @param mixed &$out
+ *
  * @param-out T $out
  */
 function internalParamOutGenericFixture(Animal $pet, mixed &$out): void

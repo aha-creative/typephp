@@ -137,4 +137,15 @@ describe('Config Unit Tests', function () {
             Config::reset();
         }
     });
+
+    test('isParamsOutEnabled returns false when params_out is disabled or params is disabled', function () {
+        Config::set(['params' => true, 'params_out' => true]);
+        expect(Config::isParamsOutEnabled())->toBeTrue();
+
+        Config::set(['params' => true, 'params_out' => false]);
+        expect(Config::isParamsOutEnabled())->toBeFalse();
+
+        Config::set(['params' => false, 'params_out' => true]);
+        expect(Config::isParamsOutEnabled())->toBeFalse();
+    });
 });

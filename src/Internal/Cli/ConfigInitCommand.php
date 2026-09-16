@@ -55,14 +55,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Function Boundary Contracts (@param & @return)
+    | Function Boundary Contracts (@param, @return, @param-out)
     |--------------------------------------------------------------------------
-    | Controls whether function and method parameter/return contracts are enforced.
+    | Controls whether function and method parameter, return, and by-reference
+    | out-parameter contracts are enforced at runtime.
     | When enabled, all parameter and return types (generics, shapes, scalars)
     | are enforced uniformly to maintain type state consistency.
     */
     'params' => true,
     'returns' => true,
+    'params_out' => true,
 
     /*
     |--------------------------------------------------------------------------

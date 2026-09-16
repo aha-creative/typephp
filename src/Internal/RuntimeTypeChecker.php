@@ -223,7 +223,7 @@ final class RuntimeTypeChecker
      */
     public static function checkParamOut(string $function, string $paramName, mixed $value, object|string|null $thisOrClass = null): ?ErrorMessage
     {
-        if (! Config::isEnabled() || ! Config::isParamsEnabled()) {
+        if (! Config::isEnabled() || ! Config::isParamsOutEnabled()) {
             return null;
         }
 

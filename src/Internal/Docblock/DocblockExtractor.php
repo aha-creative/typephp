@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace TypePHP\Internal\Docblock;
 
 use PHPStan\PhpDocParser\Ast\PhpDoc\MethodTagValueNode;
+use PHPStan\PhpDocParser\Ast\PhpDoc\ParamOutTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\ParamTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\ReturnTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\TemplateTagValueNode;
-use PHPStan\PhpDocParser\Ast\PhpDoc\ParamOutTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\VarTagValueNode;
 use PHPStan\PhpDocParser\Ast\Type\TypeNode;
 use PHPStan\PhpDocParser\Lexer\Lexer;
@@ -223,9 +223,9 @@ final class DocblockExtractor
         }
 
         $unnamed = [];
-        $unnamedPhpstan = array_values(array_filter($node->getVarTagValues('@phpstan-var'), fn($t) => $t->variableName === ''));
-        $unnamedPsalm = array_values(array_filter($node->getVarTagValues('@psalm-var'), fn($t) => $t->variableName === ''));
-        $unnamedStandard = array_values(array_filter($node->getVarTagValues('@var'), fn($t) => $t->variableName === ''));
+        $unnamedPhpstan = array_values(array_filter($node->getVarTagValues('@phpstan-var'), fn ($t) => $t->variableName === ''));
+        $unnamedPsalm = array_values(array_filter($node->getVarTagValues('@psalm-var'), fn ($t) => $t->variableName === ''));
+        $unnamedStandard = array_values(array_filter($node->getVarTagValues('@var'), fn ($t) => $t->variableName === ''));
 
         if (\count($unnamedPhpstan) > 0) {
             $unnamed = $unnamedPhpstan;

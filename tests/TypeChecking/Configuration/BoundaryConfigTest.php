@@ -49,6 +49,31 @@ function testNativeUnionWithNull(int|null $id = null, array|null $tags = null): 
     return [$id, $tags];
 }
 
+/**
+ * Function with @param-out contract
+ *
+ * @param mixed &$id
+ *
+ * @param-out positive-int $id
+ */
+function testParamOutConfigFunction(mixed &$id): void
+{
+    $id = -100; // Mutates to invalid negative int
+}
+
+/**
+ * Function with both @param and @param-out contracts
+ *
+ * @param positive-int $code
+ * @param mixed &$val
+ *
+ * @param-out positive-int $val
+ */
+function testMixedParamAndParamOutFunction(int $code, mixed &$val): void
+{
+    $val = -50;
+}
+
 describe('Function Boundary Config Toggles (params & returns)', function () {
     afterEach(function () {
         Config::reset();
@@ -79,6 +104,32 @@ describe('Function Boundary Config Toggles (params & returns)', function () {
 
         $dogs->add(new Car());
         expect($dogs->count())->toBe(1);
+    });
+
+    test('bypasses @param-out checks when params_out is set to false while keeping incoming params active', function () {
+        Config::set([
+            'params' => true,
+            'params_out' => false,
+        ]);
+
+        $val = 'initial';
+        testParamOutConfigFunction($val);
+        expect($val)->toBe(-100);
+
+        $val2 = 'init';
+        expect(fn () => testMixedParamAndParamOutFunction(-1, $val2))
+            ->toThrow(TypeError::class, 'Argument $code must be of type positive-int')
+        ;
+    });
+
+    test('bypasses @param-out checks when params is set to false', function () {
+        Config::set([
+            'params' => false,
+        ]);
+
+        $val = 'initial';
+        testParamOutConfigFunction($val);
+        expect($val)->toBe(-100);
     });
 });
 
