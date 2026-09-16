@@ -134,7 +134,131 @@ final class CallableWrapper
         self::enforceClosureConstraints($identifierName, $callable, $prefix);
 
         /** @var callable $callable */
-        return function (...$args) use ($callable, $typeNode, $registry, $prefix) {
+        return self::createDispatcherClosure($typeNode, $callable, $prefix, $registry);
+    }
+
+    /**
+     * Dispatches to a closure matching the exact by-reference signature of the callable.
+     */
+    private static function createDispatcherClosure(
+        CallableTypeNode $typeNode,
+        callable $callable,
+        string $prefix,
+        TypeValidatorRegistry $registry
+    ): Closure {
+        $hasAnyRef = false;
+        $isVariadicRef = false;
+        $refPattern = [];
+
+        foreach ($typeNode->parameters as $p) {
+            $refPattern[] = $p->isReference;
+            if ($p->isReference) {
+                $hasAnyRef = true;
+                if ($p->isVariadic) {
+                    $isVariadicRef = true;
+                }
+            }
+        }
+
+        if (! $hasAnyRef) {
+            return function (...$args) use ($callable, $typeNode, $registry, $prefix) {
+                self::validateCallbackArguments($typeNode, $args, $prefix, $registry, $callable);
+
+                try {
+                    $result = $callable(...$args);
+                } catch (TypeError $e) {
+                    throw ErrorFactory::prepareException($e);
+                }
+
+                return self::validateCallbackReturn($typeNode, $result, $prefix, $registry, $callable);
+            };
+        }
+
+        if ($isVariadicRef) {
+            return function (&...$args) use ($callable, $typeNode, $registry, $prefix) {
+                self::validateCallbackArguments($typeNode, $args, $prefix, $registry, $callable);
+
+                try {
+                    $result = $callable(...$args);
+                } catch (TypeError $e) {
+                    throw ErrorFactory::prepareException($e);
+                }
+
+                self::validateCallbackByRefMutations($typeNode, $args, $prefix, $registry, $callable);
+
+                return self::validateCallbackReturn($typeNode, $result, $prefix, $registry, $callable);
+            };
+        }
+
+        if ($refPattern === [true]) {
+            return function (mixed &$a = null) use ($callable, $typeNode, $registry, $prefix) {
+                $args = [&$a];
+                self::validateCallbackArguments($typeNode, $args, $prefix, $registry, $callable);
+
+                try {
+                    $result = $callable($a);
+                } catch (TypeError $e) {
+                    throw ErrorFactory::prepareException($e);
+                }
+
+                self::validateCallbackByRefMutations($typeNode, $args, $prefix, $registry, $callable);
+
+                return self::validateCallbackReturn($typeNode, $result, $prefix, $registry, $callable);
+            };
+        }
+
+        if ($refPattern === [true, false]) {
+            return function (mixed &$a = null, mixed $b = null) use ($callable, $typeNode, $registry, $prefix) {
+                $args = [&$a, $b];
+                self::validateCallbackArguments($typeNode, $args, $prefix, $registry, $callable);
+
+                try {
+                    $result = $callable($a, $b);
+                } catch (TypeError $e) {
+                    throw ErrorFactory::prepareException($e);
+                }
+
+                self::validateCallbackByRefMutations($typeNode, $args, $prefix, $registry, $callable);
+
+                return self::validateCallbackReturn($typeNode, $result, $prefix, $registry, $callable);
+            };
+        }
+
+        if ($refPattern === [false, true]) {
+            return function (mixed $a = null, mixed &$b = null) use ($callable, $typeNode, $registry, $prefix) {
+                $args = [$a, &$b];
+                self::validateCallbackArguments($typeNode, $args, $prefix, $registry, $callable);
+
+                try {
+                    $result = $callable($a, $b);
+                } catch (TypeError $e) {
+                    throw ErrorFactory::prepareException($e);
+                }
+
+                self::validateCallbackByRefMutations($typeNode, $args, $prefix, $registry, $callable);
+
+                return self::validateCallbackReturn($typeNode, $result, $prefix, $registry, $callable);
+            };
+        }
+
+        if ($refPattern === [true, true]) {
+            return function (mixed &$a = null, mixed &$b = null) use ($callable, $typeNode, $registry, $prefix) {
+                $args = [&$a, &$b];
+                self::validateCallbackArguments($typeNode, $args, $prefix, $registry, $callable);
+
+                try {
+                    $result = $callable($a, $b);
+                } catch (TypeError $e) {
+                    throw ErrorFactory::prepareException($e);
+                }
+
+                self::validateCallbackByRefMutations($typeNode, $args, $prefix, $registry, $callable);
+
+                return self::validateCallbackReturn($typeNode, $result, $prefix, $registry, $callable);
+            };
+        }
+
+        return function (&...$args) use ($callable, $typeNode, $registry, $prefix) {
             self::validateCallbackArguments($typeNode, $args, $prefix, $registry, $callable);
 
             try {
@@ -143,24 +267,36 @@ final class CallableWrapper
                 throw ErrorFactory::prepareException($e);
             }
 
-            $isVoidReturn = ($typeNode->returnType instanceof IdentifierTypeNode)
-                && strtolower($typeNode->returnType->name) === 'void';
+            self::validateCallbackByRefMutations($typeNode, $args, $prefix, $registry, $callable);
 
-            if (! $isVoidReturn) {
-                $err = $registry->validate($result, $typeNode->returnType, "$prefix return value");
-                if ($err !== null) {
-                    if (! CallerBoundaryResolver::shouldBypassCallback($callable, $prefix)) {
-                        throw ErrorFactory::prepareException(new TypePHPTypeError($err->getMessage()));
-                    }
+            return self::validateCallbackReturn($typeNode, $result, $prefix, $registry, $callable);
+        };
+    }
+
+    private static function validateCallbackReturn(
+        CallableTypeNode $typeNode,
+        mixed $result,
+        string $prefix,
+        TypeValidatorRegistry $registry,
+        mixed $callable
+    ): mixed {
+        $isVoidReturn = ($typeNode->returnType instanceof IdentifierTypeNode)
+            && strtolower($typeNode->returnType->name) === 'void';
+
+        if (! $isVoidReturn) {
+            $err = $registry->validate($result, $typeNode->returnType, "$prefix return value");
+            if ($err !== null) {
+                if (! CallerBoundaryResolver::shouldBypassCallback($callable, $prefix)) {
+                    throw ErrorFactory::prepareException(new TypePHPTypeError($err->getMessage()));
                 }
             }
+        }
 
-            if ($typeNode->returnType instanceof CallableTypeNode && self::isCallable($result)) {
-                $result = self::wrapTypeNode($typeNode->returnType, $result, "$prefix: Returned callback", $registry);
-            }
+        if ($typeNode->returnType instanceof CallableTypeNode && self::isCallable($result)) {
+            $result = self::wrapTypeNode($typeNode->returnType, $result, "$prefix: Returned callback", $registry);
+        }
 
-            return $result;
-        };
+        return $result;
     }
 
     /**
@@ -195,7 +331,7 @@ final class CallableWrapper
      */
     private static function validateCallbackArguments(
         CallableTypeNode $typeNode,
-        array $args,
+        array &$args,
         string $prefix,
         TypeValidatorRegistry $registry,
         mixed $callable = null
@@ -204,6 +340,68 @@ final class CallableWrapper
         $argCount = \count($argValues);
 
         foreach ($typeNode->parameters as $index => $paramNode) {
+            $rawParamName = ltrim($paramNode->parameterName ?? '', '$');
+
+            if ($paramNode->isVariadic) {
+                for ($vIdx = $index; $vIdx < $argCount; $vIdx++) {
+                    $err = $registry->validate($argValues[$vIdx], $paramNode->type, "$prefix variadic argument #" . ($vIdx + 1));
+                    if ($err !== null) {
+                        if ($callable !== null && CallerBoundaryResolver::shouldBypassCallback($callable, $prefix)) {
+                            continue;
+                        }
+
+                        throw ErrorFactory::prepareException(new TypePHPTypeError($err->getMessage()));
+                    }
+                }
+
+                break;
+            }
+
+            $val = null;
+            $hasVal = false;
+
+            if ($rawParamName !== '' && \array_key_exists($rawParamName, $args)) {
+                $val = $args[$rawParamName];
+                $hasVal = true;
+            } elseif (\array_key_exists($index, $argValues)) {
+                $val = $argValues[$index];
+                $hasVal = true;
+            }
+
+            if ($hasVal) {
+                $argLabel = $rawParamName !== '' ? "\$$rawParamName" : ('argument #' . ($index + 1));
+                $err = $registry->validate($val, $paramNode->type, "$prefix $argLabel");
+                if ($err !== null) {
+                    if ($callable !== null && CallerBoundaryResolver::shouldBypassCallback($callable, $prefix)) {
+                        continue;
+                    }
+
+                    throw ErrorFactory::prepareException(new TypePHPTypeError($err->getMessage()));
+                }
+            }
+        }
+    }
+
+    /**
+     * Validates in-place reference mutations after the callback finishes execution.
+     *
+     * @param array<int|string, mixed> $args
+     */
+    private static function validateCallbackByRefMutations(
+        CallableTypeNode $typeNode,
+        array &$args,
+        string $prefix,
+        TypeValidatorRegistry $registry,
+        mixed $callable = null
+    ): void {
+        $argValues = array_values($args);
+        $argCount = \count($argValues);
+
+        foreach ($typeNode->parameters as $index => $paramNode) {
+            if (! $paramNode->isReference) {
+                continue;
+            }
+
             $rawParamName = ltrim($paramNode->parameterName ?? '', '$');
 
             if ($paramNode->isVariadic) {
