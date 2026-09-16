@@ -153,6 +153,40 @@ PHP;
             ;
         });
 
+        test('injects checkParamOut before return statements when function has by-ref param with @param-out', function () {
+            $doc = new Doc("/**\n * @param mixed &\$val\n * @param-out positive-int \$val\n */");
+
+            $fn = new Node\Stmt\Function_('testParamOutInjection', [
+                'params' => [
+                    new Node\Param(
+                        var: new Node\Expr\Variable('val'),
+                        byRef: true
+                    ),
+                ],
+                'stmts' => [
+                    new Node\Stmt\Return_(null),
+                ],
+            ], [
+                'comments' => [$doc],
+            ]);
+
+            FunctionContractInjector::inject($fn);
+
+            $hasCheckParamOut = false;
+            foreach ($fn->stmts ?? [] as $stmt) {
+                if ($stmt instanceof Node\Stmt\If_ && $stmt->cond instanceof Node\Expr\Instanceof_) {
+                    $assign = $stmt->cond->expr;
+                    if ($assign instanceof Node\Expr\Assign && $assign->expr instanceof Node\Expr\FuncCall) {
+                        if ($assign->expr->name->toString() === 'TypePHP\Internal\RuntimeTypeChecker::checkParamOut') {
+                            $hasCheckParamOut = true;
+                        }
+                    }
+                }
+            }
+
+            expect($hasCheckParamOut)->toBeTrue();
+        });
+
         test('wraps native void return statements in if check with null return', function () {
             $doc = new Doc('/** @return void */');
 

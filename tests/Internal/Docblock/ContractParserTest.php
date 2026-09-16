@@ -30,6 +30,12 @@ use TypePHP\Tests\Fixtures\Types\MagicPropertyFixture;
 use TypePHP\Tests\Fixtures\Types\NestedAliasService;
 use TypePHP\Tests\Fixtures\Types\NonCpmStrings;
 
+/**
+ * @param mixed &$id
+ * @param-out positive-int $id
+ */
+function sampleParamOutDocblockFunction(mixed &$id): void {}
+
 describe('DocblockParser Unit Tests', function () {
     beforeEach(function () {
         Config::reset();
@@ -52,6 +58,15 @@ describe('DocblockParser Unit Tests', function () {
                 ->and($contract1['types'])->toHaveKey('id')
                 ->and($contract1['return'])->not()->toBeNull()
                 ->and($contract1)->toBe($contract2)
+            ;
+        });
+
+        test('parses function with @param-out contracts', function () {
+            $contract = DocblockParser::parse('sampleParamOutDocblockFunction');
+
+            expect($contract['hasParamOutContract'])->toBeTrue()
+                ->and($contract['paramOuts'])->toHaveKey('id')
+                ->and((string) $contract['paramOuts']['id'])->toBe('positive-int')
             ;
         });
 

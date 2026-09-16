@@ -323,4 +323,47 @@ DOC;
             ->and($tagsByName['role'])->toBe("('admin' | 'user')")
         ;
     });
+
+    describe('@param-out Tag Extractions (@param-out, @phpstan-param-out, @psalm-param-out)', function () {
+        test('extracts basic @param-out tag', function () {
+            $doc = '/** @param-out positive-int $id */';
+            $node = DocblockExtractor::parseDocString($doc);
+            $tags = DocblockExtractor::getParamOutTags($node);
+
+            expect($tags)->toHaveKey('id')
+                ->and((string) $tags['id']->type)->toBe('positive-int')
+            ;
+        });
+
+        test('prioritizes @phpstan-param-out over @psalm-param-out and @param-out', function () {
+            $doc = <<<'DOC'
+/**
+ * @param-out mixed $id
+ * @psalm-param-out int $id
+ * @phpstan-param-out positive-int $id
+ */
+DOC;
+            $node = DocblockExtractor::parseDocString($doc);
+            $tags = DocblockExtractor::getParamOutTags($node);
+
+            expect($tags)->toHaveKey('id')
+                ->and((string) $tags['id']->type)->toBe('positive-int')
+            ;
+        });
+
+        test('prioritizes @psalm-param-out over @param-out when @phpstan-param-out is absent', function () {
+            $doc = <<<'DOC'
+/**
+ * @param-out mixed $id
+ * @psalm-param-out non-empty-string $id
+ */
+DOC;
+            $node = DocblockExtractor::parseDocString($doc);
+            $tags = DocblockExtractor::getParamOutTags($node);
+
+            expect($tags)->toHaveKey('id')
+                ->and((string) $tags['id']->type)->toBe('non-empty-string')
+            ;
+        });
+    });
 });

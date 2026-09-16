@@ -53,4 +53,20 @@ describe('RuntimeTypeChecker Unit Tests', function () {
         $val = RuntimeTypeChecker::checkYield('nonExistentFunc', 'key', 'value');
         expect($val)->toBe('value');
     });
+
+    test('checkParamOut validates value against post-condition contract', function () {
+        $valid = RuntimeTypeChecker::checkParamOut(
+            'TypePHP\Tests\Internal\Checker\internalParamOutScalarFixture',
+            'id',
+            42
+        );
+        expect($valid)->toBeNull();
+
+        $invalid = RuntimeTypeChecker::checkParamOut(
+            'TypePHP\Tests\Internal\Checker\internalParamOutScalarFixture',
+            'id',
+            -50
+        );
+        expect($invalid)->toBeInstanceOf(ErrorMessage::class);
+    });
 });
